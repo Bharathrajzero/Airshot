@@ -5,6 +5,9 @@ AirShot is a futuristic, browser-based arcade shooting gallery powered by comput
 Built completely with vanilla frontend technologies, MediaPipe Hands, and the dynamic Web Audio API, it features adaptive hand-tracking smoothing, low-latency crosshairs, and a fully synthetic retro sound design with zero dependencies on heavy asset files[cite: 1].
 
 ---
+## Screenshot
+<img width="1920" height="1079" alt="image" src="https://github.com/user-attachments/assets/dcac28fd-0ffc-406e-9a87-b022a4c02a6a" />
+<img width="1920" height="1079" alt="image" src="https://github.com/user-attachments/assets/246802f0-e8b5-415f-b804-9df86f8c8c2a" />
 
 ## Live Features
 
