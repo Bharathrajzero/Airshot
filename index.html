@@ -1,0 +1,1519 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AirShot-Gesture Bottle Shooting</title>
+
+  <!-- Crucial hotfix for MediaPipe/Emscripten sandboxing issues -->
+  <script>
+    if (typeof window !== 'undefined') {
+      window.arguments = undefined;
+      window.Module = { arguments: [] };
+    }
+  </script>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- MediaPipe & Camera Utilities -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+  <style>
+    body {
+      font-family: 'Rajdhani', sans-serif;
+    }
+    .font-orbitron {
+      font-family: 'Orbitron', sans-serif;
+    }
+    .neon-border-cyan {
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.25), inset 0 0 10px rgba(6, 182, 212, 0.15);
+      border: 1px solid rgba(6, 182, 212, 0.4);
+    }
+    .neon-border-pink {
+      box-shadow: 0 0 15px rgba(236, 72, 153, 0.25), inset 0 0 10px rgba(236, 72, 153, 0.15);
+      border: 1px solid rgba(236, 72, 153, 0.4);
+    }
+    .neon-border-green {
+      box-shadow: 0 0 15px rgba(34, 197, 94, 0.25), inset 0 0 10px rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+    }
+    .neon-text-cyan {
+      text-shadow: 0 0 8px rgba(6, 182, 212, 0.8);
+    }
+    .neon-text-pink {
+      text-shadow: 0 0 8px rgba(236, 72, 153, 0.8);
+    }
+    .neon-text-yellow {
+      text-shadow: 0 0 8px rgba(234, 179, 8, 0.8);
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col justify-between overflow-x-hidden">
+
+  <!-- Header Navbar -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur-md px-6 py-4 flex flex-wrap justify-between items-center gap-4 z-10 shrink-0">
+    <div class="flex items-center space-x-3">
+      <div class="w-10 h-10 rounded-lg bg-gradient-to-tr from-cyan-500 to-emerald-500 flex items-center justify-center text-xl shadow-lg shadow-cyan-500/20">
+        <i class="fa-solid fa-crosshairs text-white animate-spin-slow"></i>
+      </div>
+      <div>
+        <h1 class="font-orbitron text-xl font-black tracking-wider bg-gradient-to-r from-cyan-400 via-emerald-400 to-pink-500 bg-clip-text text-transparent">
+          AirShot
+        </h1>
+        <p class="text-xs text-slate-400 tracking-widest font-semibold uppercase">Gesture Bottle Shooting</p>
+      </div>
+    </div>
+
+    <!-- Active Input Status Dashboard -->
+    <div class="flex items-center gap-4 flex-wrap">
+      <!-- Audio Toggle -->
+      <button id="btn-sound-toggle" class="px-3 py-1.5 rounded-lg text-xs font-bold font-mono border border-slate-800 bg-slate-950 text-emerald-400 hover:text-emerald-300 flex items-center gap-2 transition-all">
+        <i class="fa-solid fa-volume-high"></i> SOUND ON
+      </button>
+
+      <!-- Controller Mode Toggle -->
+      <div class="flex bg-slate-950 p-1 rounded-lg border border-slate-800">
+        <button id="ctrl-gesture" class="px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1.5 transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md shadow-cyan-500/10">
+          <i class="fa-solid fa-hand-pointer"></i> Gestures
+        </button>
+        <button id="ctrl-fallback" class="px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1.5 transition-all text-slate-400 hover:text-white">
+          <i class="fa-solid fa-computer-mouse"></i> Mouse/Touch
+        </button>
+      </div>
+
+      <!-- Live Tracking Status -->
+      <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs">
+        <span class="relative flex h-2 w-2">
+          <span id="status-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
+          <span id="status-dot" class="relative inline-flex rounded-full h-2 w-2 bg-rose-600"></span>
+        </span>
+        <span id="status-text" class="font-mono text-slate-400 uppercase font-semibold">Sensor Off</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Application Dashboard Grid -->
+  <main class="flex-1 max-w-[1600px] w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch overflow-hidden">
+    
+    <!-- Left Column: Video Tracking Preview, Sensitivity & Options -->
+    <section class="lg:col-span-4 flex flex-col gap-6 h-full">
+      
+      <!-- Live Video / Skeleton Stream Monitor -->
+      <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 flex flex-col gap-4 neon-border-cyan relative overflow-hidden">
+        <div class="absolute top-2 right-2 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded text-[10px] font-mono font-semibold text-cyan-400 tracking-wider uppercase z-10 border border-cyan-500/20">
+          WEBCAM FEED
+        </div>
+        
+        <h3 class="font-orbitron font-bold text-slate-300 flex items-center gap-2 text-sm tracking-wide">
+          <i class="fa-solid fa-eye text-cyan-400"></i> HAND DEVIATION TRACKER
+        </h3>
+
+        <!-- MediaPipe Video Viewer Area -->
+        <div class="relative w-full aspect-video bg-slate-950 rounded-xl overflow-hidden border border-slate-800/80">
+          <video id="webcam" class="hidden" autoplay playsinline></video>
+          <canvas id="output-canvas" class="w-full h-full scale-x-[-1] object-cover"></canvas>
+          
+          <!-- State Overlay waiting for Cam Approval -->
+          <div id="cam-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-slate-950/95 z-20 transition-all duration-300">
+            <div class="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center mb-3">
+              <i class="fa-solid fa-video-slash text-xl text-slate-500"></i>
+            </div>
+            <p class="font-bold text-slate-300 text-sm">Awaiting Video Input</p>
+            <p class="text-[11px] text-slate-500 mt-1 max-w-xs leading-relaxed">Allow camera permissions for interactive air gesture bottle bursting!</p>
+            <button id="btn-init-camera" class="mt-4 px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 active:scale-95 transition-all text-xs font-bold text-white rounded-lg flex items-center gap-2">
+              <i class="fa-solid fa-power-off"></i> Initialize Camera
+            </button>
+          </div>
+        </div>
+
+        <!-- Realtime Coordinates Telemetry -->
+        <div class="bg-slate-950/60 rounded-xl p-3 border border-slate-800/80 flex flex-col gap-2">
+          <div class="flex justify-between text-xs text-slate-400 font-mono">
+            <span>Laser Aim-Point:</span>
+            <span class="text-cyan-400 font-bold flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+              Index Fingertip
+            </span>
+          </div>
+          <div class="grid grid-cols-3 gap-2 text-[10px] font-mono mt-1">
+            <div class="bg-slate-900/80 p-2 rounded border border-slate-800">
+              <span class="text-slate-500 block">RAW X</span>
+              <span id="coord-raw-x" class="text-slate-300 font-bold">0.00</span>
+            </div>
+            <div class="bg-slate-900/80 p-2 rounded border border-slate-800">
+              <span class="text-slate-500 block">RAW Y</span>
+              <span id="coord-raw-y" class="text-slate-300 font-bold">0.00</span>
+            </div>
+            <div class="bg-slate-900/80 p-2 rounded border border-slate-800">
+              <span class="text-slate-500 block">NORM PINCH</span>
+              <span id="coord-pinch-dist" class="text-pink-400 font-bold">0.00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Custom Adjustments, Weapon Selection, Gesture Guides -->
+      <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 flex flex-col gap-5 flex-1">
+        <h3 class="font-orbitron font-bold text-slate-300 flex items-center gap-2 text-sm tracking-wide">
+          <i class="fa-solid fa-gamepad text-emerald-400"></i> GEARS & CALIBRATION
+        </h3>
+
+        <!-- Trigger Gesture Options -->
+        <div class="flex flex-col gap-2">
+          <label class="text-xs font-bold text-slate-400 block">Primary Gesture Trigger</label>
+          <div class="grid grid-cols-2 gap-2 mt-1">
+            <button id="trigger-pinch" class="px-3 py-2 text-xs font-bold rounded-lg border bg-emerald-950/50 border-emerald-500/50 text-emerald-300 transition-all flex flex-col items-center gap-1">
+              <span class="font-bold text-sm"><i class="fa-solid fa-hand-holding"></i> Pinch Finger</span>
+              <span class="text-[9px] text-emerald-500/80 font-normal">Touch Index + Thumb</span>
+            </button>
+            <button id="trigger-hover" class="px-3 py-2 text-xs font-bold rounded-lg border bg-slate-950 border-slate-800 text-slate-400 hover:text-white transition-all flex flex-col items-center gap-1">
+              <span class="font-bold text-sm"><i class="fa-solid fa-hourglass-half"></i> Hover-Lock</span>
+              <span class="text-[9px] text-slate-500 font-normal">Autofire on targets</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Aim Dampener / Smoothing Controller -->
+        <div class="flex flex-col gap-1.5">
+          <div class="flex justify-between text-xs font-bold text-slate-400">
+            <label for="slider-smoothing">Aim-Point Smoothing</label>
+            <span id="val-smoothing" class="text-cyan-400 font-mono">0.30</span>
+          </div>
+          <input type="range" id="slider-smoothing" min="0.05" max="0.95" step="0.05" value="0.30" 
+                 class="w-full accent-cyan-400 h-1.5 bg-slate-950 rounded-lg cursor-pointer">
+          <p class="text-[9px] text-slate-500">Lower values filter hand-shakes, higher values maximize swift tracking response.</p>
+        </div>
+
+        <!-- Weapon Armory Selector -->
+        <div class="flex flex-col gap-2 border-t border-slate-800/60 pt-4">
+          <label class="text-xs font-bold text-slate-400">Weapon Select</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button id="wpn-laser" class="p-2 text-xs rounded-xl border border-cyan-500/40 bg-cyan-950/40 text-cyan-200 font-semibold flex flex-col items-center gap-1 transition-all active:scale-95">
+              <i class="fa-solid fa-gun text-base"></i>
+              <span>Laser Gun</span>
+            </button>
+            <button id="wpn-shotgun" class="p-2 text-xs rounded-xl border border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200 font-semibold flex flex-col items-center gap-1 transition-all active:scale-95">
+              <i class="fa-solid fa-burst text-base"></i>
+              <span>Shotgun</span>
+            </button>
+            <button id="wpn-railgun" class="p-2 text-xs rounded-xl border border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200 font-semibold flex flex-col items-center gap-1 transition-all active:scale-95">
+              <i class="fa-solid fa-wand-magic-sparkles text-base"></i>
+              <span>Railgun</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Informative Tips Card -->
+        <div class="p-3 bg-slate-950/60 rounded-xl border border-slate-800/60 text-[11px] text-slate-400 flex flex-col gap-1.5 mt-auto">
+          <div class="flex gap-2 items-start">
+            <i class="fa-solid fa-lightbulb text-yellow-400 mt-0.5"></i>
+            <span><strong>Golden Bottles</strong> grant a massive speed powerup and score multipliers!</span>
+          </div>
+          <div class="flex gap-2 items-start">
+            <i class="fa-solid fa-skull-crossbones text-rose-500 mt-0.5"></i>
+            <span>Avoid hitting red <strong>Toxic Poison Bottles</strong>! They deplete score and bullet ammo.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Interactive Bottle Gallery Arena -->
+    <section class="lg:col-span-8 flex flex-col gap-6 h-full justify-between">
+      
+      <!-- Primary Game board console wrapper -->
+      <div class="bg-slate-900/60 border border-slate-800 rounded-2xl flex flex-col overflow-hidden neon-border-pink flex-1">
+        
+        <!-- Game Console Sub Header details, scoring HUD -->
+        <div class="px-5 py-4 bg-slate-950/90 border-b border-slate-800/60 flex flex-wrap justify-between items-center gap-4">
+          <div class="flex gap-2">
+            <button id="mode-classic" class="px-3 py-1.5 rounded-lg text-xs font-bold font-orbitron transition-all bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-lg shadow-pink-500/20">
+              <i class="fa-solid fa-beer-mug-empty"></i> CONVEYOR BELT
+            </button>
+            <button id="mode-survival" class="px-3 py-1.5 rounded-lg text-xs font-bold font-orbitron transition-all text-slate-400 hover:bg-slate-900 hover:text-white">
+              <i class="fa-solid fa-clock-rotate-left"></i> TIME CHALLENGE
+            </button>
+          </div>
+
+          <!-- Dynamic score parameters -->
+          <div class="flex items-center gap-5">
+            <div class="text-right">
+              <span class="text-[9px] text-slate-500 block font-mono font-bold tracking-wider">AMMO</span>
+              <span id="game-ammo" class="font-orbitron font-black text-lg text-amber-400">15/15</span>
+            </div>
+            <div class="h-8 w-px bg-slate-800"></div>
+            <div class="text-right font-mono">
+              <span class="text-[9px] text-slate-500 block font-bold tracking-wider">COMBO</span>
+              <span id="game-combo" class="font-bold text-lg text-emerald-400">x1</span>
+            </div>
+            <div class="h-8 w-px bg-slate-800"></div>
+            <div class="text-right">
+              <span class="text-[9px] text-slate-500 block font-mono font-bold tracking-wider">SCORE</span>
+              <span id="game-score" class="font-orbitron font-black text-xl text-pink-400 neon-text-pink">0</span>
+            </div>
+            <div class="h-8 w-px bg-slate-800"></div>
+            <div class="text-right">
+              <span class="text-[9px] text-slate-500 block font-mono font-bold tracking-wider">BEST</span>
+              <span id="game-hiscore" class="font-orbitron font-black text-xl text-cyan-400 neon-text-cyan">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Render Target Canvas -->
+        <div class="relative flex-1 bg-slate-950/95 flex items-center justify-center overflow-hidden min-h-[420px]">
+          <canvas id="game-canvas" class="block w-full max-w-full aspect-[4/3] max-h-full cursor-none object-contain"></canvas>
+
+          <!-- Floating Interactive Setup Modals -->
+          <div id="game-modal" class="absolute inset-0 bg-slate-950/95 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center transition-all duration-300">
+            <div class="w-16 h-16 rounded-full bg-gradient-to-r from-pink-500 to-cyan-500 flex items-center justify-center text-2xl text-white shadow-xl shadow-pink-500/20 mb-4 animate-bounce">
+              <i id="modal-icon" class="fa-solid fa-gamepad"></i>
+            </div>
+            
+            <h2 id="modal-title" class="font-orbitron font-black text-3xl tracking-wider text-white uppercase neon-text-pink mb-2">
+              Airshot Gallery
+            </h2>
+            <p id="modal-desc" class="text-sm text-slate-400 max-w-md mb-6 leading-relaxed">
+              Aim your index finger at the camera frame to control the laser reticle. Pinch your thumb and index together to shatter the neon glass bottles!
+            </p>
+
+            <div class="flex flex-col sm:flex-row gap-4">
+              <button id="btn-start-game" class="px-8 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 active:scale-95 transition-all font-orbitron font-black tracking-widest text-white rounded-xl shadow-lg shadow-cyan-500/20 text-sm">
+                INITIALIZE GAME
+              </button>
+              <button id="btn-switch-control" class="px-6 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 transition-all font-bold text-slate-300 rounded-xl text-sm flex items-center justify-center gap-2">
+                <i class="fa-solid fa-computer-mouse"></i> Play with Mouse
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gallery Info Guide Footer -->
+        <div class="px-5 py-4 bg-slate-950/90 border-t border-slate-800/60 flex justify-between items-center flex-wrap gap-4 text-xs text-slate-500">
+          <div class="flex items-center gap-2 font-mono">
+            <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-bold">R</span>
+            <span>or pinch offscreen to RELOAD Weapon</span>
+          </div>
+          <div id="game-help-text" class="text-slate-400 font-semibold italic">
+            Keep your hand 2-3 feet away from your camera lens for precise targeting.
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Global Footer parameters -->
+  <footer class="border-t border-slate-900 bg-slate-950 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-3 shrink-0 text-xs text-slate-500">
+    <div class="flex items-center gap-4 font-mono">
+      <span>Latency: <strong id="perf-latency" class="text-cyan-500 font-bold">-- ms</strong></span>
+      <span>FPS: <strong id="perf-fps" class="text-pink-500 font-bold">--</strong></span>
+    </div>
+  </footer>
+
+  <script>
+    // --- APP & GAME STATE CONFIGURATION ---
+    const appState = {
+      controller: 'gesture', // 'gesture' or 'fallback' (mouse)
+      activeMode: 'classic', // 'classic' (conveyor) or 'survival' (timer challenge)
+      triggerType: 'pinch', // 'pinch' or 'hover'
+      cameraActive: false,
+      mirrorInput: true,
+      smoothing: 0.30,
+      soundOn: true,
+      
+      // Tracking coordinates
+      rawHandX: 0,
+      rawHandY: 0,
+      rawPinchDist: 0,
+      normalizedPinchDist: 0.5,
+      smoothedHandX: 0.5,
+      smoothedHandY: 0.5,
+      isPinched: false
+    };
+
+    // Synthesize Retro Sound Effects using raw Web Audio API
+    const audioSynth = {
+      ctx: null,
+
+      init() {
+        if (this.ctx) return;
+        try {
+          this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+          console.warn("Web Audio Context not supported", e);
+        }
+      },
+
+      playLaser(freqStart = 880, freqEnd = 220, duration = 0.15) {
+        if (!appState.soundOn || !this.ctx) return;
+        this.init();
+        
+        const osc = this.ctx.createOscillator();
+        const gainNode = this.ctx.createGain();
+        
+        osc.connect(gainNode);
+        gainNode.connect(this.ctx.destination);
+        
+        osc.frequency.setValueAtTime(freqStart, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(freqEnd, this.ctx.currentTime + duration);
+        
+        gainNode.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+        
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+      },
+
+      playShatter(isGolden = false) {
+        if (!appState.soundOn || !this.ctx) return;
+        this.init();
+
+        const duration = 0.45;
+        const bufferSize = this.ctx.sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        // Generate customized noise
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        // Bandpass Filter to make it sound thin/metallic
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = isGolden ? 3200 : 1800;
+        filter.Q.value = 1.8;
+
+        const gainNode = this.ctx.createGain();
+        gainNode.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        noise.connect(filter);
+        filter.connect(gainNode);
+        gainNode.connect(this.ctx.destination);
+
+        noise.start();
+
+        // Also add metallic high-freq ring
+        const ringOsc = this.ctx.createOscillator();
+        const ringGain = this.ctx.createGain();
+        ringOsc.type = 'sine';
+        ringOsc.frequency.setValueAtTime(isGolden ? 4500 : 2500, this.ctx.currentTime);
+        ringOsc.connect(ringGain);
+        ringGain.connect(this.ctx.destination);
+
+        ringGain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+        ringGain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
+
+        ringOsc.start();
+        ringOsc.stop(this.ctx.currentTime + 0.3);
+      },
+
+      playExplosion() { 
+        if (!appState.soundOn || !this.ctx) return;
+        this.init();
+
+        const duration = 0.5;
+        const osc = this.ctx.createOscillator();
+        const gainNode = this.ctx.createGain();
+        
+        osc.type = 'sawtooth';
+        osc.connect(gainNode);
+        gainNode.connect(this.ctx.destination);
+        
+        osc.frequency.setValueAtTime(140, this.ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(40, this.ctx.currentTime + duration);
+        
+        gainNode.gain.setValueAtTime(0.4, this.ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+        
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+      },
+
+      playReload() {
+        if (!appState.soundOn || !this.ctx) return;
+        this.init();
+
+        const osc = this.ctx.createOscillator();
+        const gainNode = this.ctx.createGain();
+
+        osc.connect(gainNode);
+        gainNode.connect(this.ctx.destination);
+
+        osc.frequency.setValueAtTime(330, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(660, this.ctx.currentTime + 0.25);
+
+        gainNode.gain.setValueAtTime(0.1, this.ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.25);
+      },
+
+      playEmpty() {
+        if (!appState.soundOn || !this.ctx) return;
+        this.init();
+
+        const osc = this.ctx.createOscillator();
+        const gainNode = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.connect(gainNode);
+        gainNode.connect(this.ctx.destination);
+
+        osc.frequency.setValueAtTime(120, this.ctx.currentTime);
+        gainNode.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.12);
+      }
+    };
+
+    // Setup Canvas Board
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 800;
+    canvas.height = 600;
+
+    // High Scores stored locally
+    const highScores = {
+      classic: localStorage.getItem('hi_bottles_classic') ? parseInt(localStorage.getItem('hi_bottles_classic')) : 0,
+      survival: localStorage.getItem('hi_bottles_survival') ? parseInt(localStorage.getItem('hi_bottles_survival')) : 0
+    };
+    document.getElementById('game-hiscore').innerText = highScores[appState.activeMode];
+
+    // --- GAME PHYSICS & OBJECT CONFIGS ---
+    const game = {
+      isRunning: false,
+      score: 0,
+      combo: 1,
+      comboTimer: 0,
+      ammo: 15,
+      maxAmmo: 15,
+      reloadProgress: 0,
+      isReloading: false,
+      timeLeft: 60,
+      survivalTick: 0,
+
+      // Weapon variables
+      activeWeapon: 'laser',
+      weaponStats: {
+        laser: { maxAmmo: 15, cooldown: 8, spread: 0, shotCount: 1, bulletRange: 8, laserColor: '#06b6d4', scoreMult: 1 },
+        shotgun: { maxAmmo: 6, cooldown: 24, spread: 45, shotCount: 5, bulletRange: 20, laserColor: '#ec4899', scoreMult: 1.2 },
+        railgun: { maxAmmo: 8, cooldown: 18, spread: 0, shotCount: 1, bulletRange: 15, laserColor: '#10b981', scoreMult: 1.5 }
+      },
+      weaponCooldown: 0,
+
+      // Entity storage arrays
+      bottles: [],
+      particles: [],
+      floatingTexts: [],
+      lasersShot: [],
+
+      // Hover Auto-lock variables
+      hoverTarget: null,
+      hoverAccumulator: 0,
+
+      // Conveyor shelves indices
+      shelves: [
+        { y: 180, speed: 1.5, dir: 1, label: "Top Row" },
+        { y: 320, speed: 2.2, dir: -1, label: "Middle Row" },
+        { y: 460, speed: 1.8, dir: 1, label: "Bottom Row" }
+      ]
+    };
+
+    const BOTTLE_TYPES = {
+      normal: { w: 32, h: 80, points: 100, color: '#38bdf8', secondaryColor: '#0284c7', label: "Neon" },
+      golden: { w: 32, h: 80, points: 300, color: '#eab308', secondaryColor: '#ca8a04', label: "Golden Bonus" },
+      poison: { w: 32, h: 80, points: -200, color: '#f43f5e', secondaryColor: '#e11d48', label: "Toxic Poison" }
+    };
+
+    function spawnBottle(shelfIndex, xForce = null) {
+      const shelf = game.shelves[shelfIndex];
+      const types = ['normal', 'normal', 'normal', 'normal', 'poison', 'golden']; 
+      const chosenType = types[Math.floor(Math.random() * types.length)];
+      const config = BOTTLE_TYPES[chosenType];
+
+      let startX = shelf.dir === 1 ? -60 : canvas.width + 60;
+      if (xForce !== null) startX = xForce;
+
+      game.bottles.push({
+        x: startX,
+        y: shelf.y - config.h + 10,
+        w: config.w,
+        h: config.h,
+        type: chosenType,
+        shelfIndex: shelfIndex,
+        isBroken: false,
+        swayOffset: Math.random() * Math.PI,
+        wobble: 0
+      });
+    }
+
+    function initGame(mode = appState.activeMode) {
+      game.score = 0;
+      game.combo = 1;
+      game.comboTimer = 0;
+      game.ammo = game.weaponStats[game.activeWeapon].maxAmmo;
+      game.maxAmmo = game.weaponStats[game.activeWeapon].maxAmmo;
+      game.isReloading = false;
+      game.weaponCooldown = 0;
+      game.timeLeft = 60;
+      
+      game.bottles = [];
+      game.particles = [];
+      game.floatingTexts = [];
+      game.lasersShot = [];
+
+      document.getElementById('game-score').innerText = 0;
+      document.getElementById('game-combo').innerText = 'x1';
+      document.getElementById('game-ammo').innerText = `${game.ammo}/${game.maxAmmo}`;
+      document.getElementById('game-hiscore').innerText = highScores[mode];
+
+      for (let s = 0; s < game.shelves.length; s++) {
+        const bottleCount = 3 + Math.floor(Math.random() * 2);
+        for (let b = 0; b < bottleCount; b++) {
+          const spreadX = (canvas.width / bottleCount) * b + Math.random() * 50 + 40;
+          spawnBottle(s, spreadX);
+        }
+      }
+    }
+
+    function spawnShatterEffect(x, y, color) {
+      const count = 22;
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const velocity = 2 + Math.random() * 7;
+        game.particles.push({
+          x: x,
+          y: y,
+          vx: Math.cos(angle) * velocity,
+          vy: Math.sin(angle) * velocity - (2 + Math.random() * 3),
+          color: color,
+          size: 1.5 + Math.random() * 3.5,
+          angle: Math.random() * Math.PI * 2,
+          spin: -0.15 + Math.random() * 0.3,
+          alpha: 1.0,
+          decay: 0.012 + Math.random() * 0.015,
+          gravity: 0.18
+        });
+      }
+    }
+
+    function triggerFloatingText(x, y, text, color = '#22d3ee') {
+      game.floatingTexts.push({
+        x: x,
+        y: y,
+        text: text,
+        color: color,
+        vy: -1.2,
+        alpha: 1.0,
+        age: 0,
+        maxAge: 45
+      });
+    }
+
+    // --- COLLISION & SHOOT ENGINE ---
+    function fireWeapon(targetX, targetY) {
+      if (!game.isRunning || game.isReloading) return;
+      if (game.weaponCooldown > 0) return;
+
+      if (game.ammo <= 0) {
+        audioSynth.playEmpty();
+        triggerReload();
+        return;
+      }
+
+      const stats = game.weaponStats[game.activeWeapon];
+      game.ammo--;
+      document.getElementById('game-ammo').innerText = `${game.ammo}/${game.maxAmmo}`;
+      game.weaponCooldown = stats.cooldown;
+
+      audioSynth.playLaser(600, 150, 0.15);
+      let didHitSomething = false;
+
+      for (let s = 0; s < stats.shotCount; s++) {
+        const spreadX = (Math.random() - 0.5) * stats.spread;
+        const spreadY = (Math.random() - 0.5) * stats.spread;
+        const finalX = targetX + spreadX;
+        const finalY = targetY + spreadY;
+
+        game.lasersShot.push({
+          startX: canvas.width / 2, 
+          startY: canvas.height,
+          endX: finalX,
+          endY: finalY,
+          color: stats.laserColor,
+          alpha: 1.0,
+          range: stats.bulletRange
+        });
+
+        game.bottles.forEach((bottle) => {
+          if (bottle.isBroken) return;
+
+          if (finalX >= bottle.x && finalX <= bottle.x + bottle.w &&
+              finalY >= bottle.y && finalY <= bottle.y + bottle.h) {
+            
+            shatterBottle(bottle, finalX, finalY);
+            didHitSomething = true;
+          }
+        });
+      }
+
+      if (didHitSomething) {
+        game.comboTimer = 220; 
+        game.combo = Math.min(game.combo + 1, 8);
+        document.getElementById('game-combo').innerText = `x${game.combo}`;
+      } else {
+        if (game.activeWeapon !== 'shotgun') {
+          game.combo = 1;
+          document.getElementById('game-combo').innerText = `x1`;
+        }
+      }
+    }
+
+    function shatterBottle(bottle, hitX, hitY) {
+      bottle.isBroken = true;
+      const typeCfg = BOTTLE_TYPES[bottle.type];
+
+      let baseScore = typeCfg.points;
+      let finalScore = baseScore * game.combo;
+      game.score += finalScore;
+      document.getElementById('game-score').innerText = game.score;
+
+      if (bottle.type === 'golden') {
+        audioSynth.playShatter(true);
+        triggerFloatingText(hitX, hitY - 20, `+${finalScore} GOLD BONUS!`, '#f59e0b');
+        game.ammo = Math.min(game.ammo + 3, game.maxAmmo);
+        document.getElementById('game-ammo').innerText = `${game.ammo}/${game.maxAmmo}`;
+      } else if (bottle.type === 'poison') {
+        audioSynth.playExplosion();
+        triggerFloatingText(hitX, hitY - 20, `${finalScore} TOXIC!`, '#f43f5e');
+        game.ammo = Math.max(game.ammo - 2, 0);
+        document.getElementById('game-ammo').innerText = `${game.ammo}/${game.maxAmmo}`;
+      } else {
+        audioSynth.playShatter(false);
+        triggerFloatingText(hitX, hitY - 20, `+${finalScore}`, '#38bdf8');
+      }
+
+      spawnShatterEffect(bottle.x + bottle.w / 2, bottle.y + bottle.h / 2, typeCfg.color);
+    }
+
+    function triggerReload() {
+      if (game.isReloading) return;
+      game.isReloading = true;
+      game.reloadProgress = 0;
+      audioSynth.playReload();
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'r' || e.key === 'R') {
+        triggerReload();
+      }
+    });
+
+    function selectWeapon(wpnId) {
+      game.activeWeapon = wpnId;
+      game.maxAmmo = game.weaponStats[wpnId].maxAmmo;
+      game.ammo = game.maxAmmo;
+      document.getElementById('game-ammo').innerText = `${game.ammo}/${game.maxAmmo}`;
+
+      ['wpn-laser', 'wpn-shotgun', 'wpn-railgun'].forEach(id => {
+        document.getElementById(id).className = "p-2 text-xs rounded-xl border border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200 font-semibold flex flex-col items-center gap-1 transition-all active:scale-95";
+      });
+
+      const elementMap = { laser: 'wpn-laser', shotgun: 'wpn-shotgun', railgun: 'wpn-railgun' };
+      const currentAccent = { laser: 'border-cyan-500/40 bg-cyan-950/40 text-cyan-200', shotgun: 'border-pink-500/40 bg-pink-950/40 text-pink-200', railgun: 'border-emerald-500/40 bg-emerald-950/40 text-emerald-200' };
+      
+      document.getElementById(elementMap[wpnId]).className = `p-2 text-xs rounded-xl border ${currentAccent[wpnId]} font-semibold flex flex-col items-center gap-1 transition-all active:scale-95`;
+    }
+
+    document.getElementById('wpn-laser').addEventListener('click', () => selectWeapon('laser'));
+    document.getElementById('wpn-shotgun').addEventListener('click', () => selectWeapon('shotgun'));
+    document.getElementById('wpn-railgun').addEventListener('click', () => selectWeapon('railgun'));
+
+    // --- CANVAS RENDER PIPELINE ---
+    function gameLoop() {
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Conveyor Tracks
+      game.shelves.forEach((shelf, index) => {
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 14;
+        ctx.beginPath();
+        ctx.moveTo(0, shelf.y + 6);
+        ctx.lineTo(canvas.width, shelf.y + 6);
+        ctx.stroke();
+
+        ctx.strokeStyle = index === 0 ? 'rgba(6, 182, 212, 0.4)' : index === 1 ? 'rgba(236, 72, 153, 0.4)' : 'rgba(34, 197, 94, 0.4)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, shelf.y);
+        ctx.lineTo(canvas.width, shelf.y);
+        ctx.stroke();
+
+        ctx.fillStyle = '#475569';
+        ctx.font = 'bold 9px Orbitron';
+        ctx.fillText(shelf.label.toUpperCase(), 12, shelf.y - 12);
+      });
+
+      if (game.isRunning) {
+        game.shelves.forEach((shelf, sIndex) => {
+          const activeOnShelf = game.bottles.filter(b => b.shelfIndex === sIndex && !b.isBroken).length;
+          if (activeOnShelf < 4 && Math.random() < 0.007) {
+            spawnBottle(sIndex);
+          }
+        });
+
+        if (game.comboTimer > 0) {
+          game.comboTimer--;
+          if (game.comboTimer === 0) {
+            game.combo = 1;
+            document.getElementById('game-combo').innerText = 'x1';
+          }
+        }
+
+        if (game.weaponCooldown > 0) game.weaponCooldown--;
+
+        if (game.isReloading) {
+          game.reloadProgress += 1.8;
+          if (game.reloadProgress >= 100) {
+            game.isReloading = false;
+            game.ammo = game.maxAmmo;
+            document.getElementById('game-ammo').innerText = `${game.ammo}/${game.maxAmmo}`;
+          }
+        }
+
+        if (appState.activeMode === 'survival') {
+          game.survivalTick++;
+          if (game.survivalTick >= 60) {
+            game.survivalTick = 0;
+            game.timeLeft--;
+            if (game.timeLeft <= 0) {
+              handleGameOver();
+            }
+          }
+        }
+      }
+
+      // Draw Active Conveyor Bottles
+      for (let i = game.bottles.length - 1; i >= 0; i--) {
+        const bottle = game.bottles[i];
+        
+        if (game.isRunning) {
+          const shelf = game.shelves[bottle.shelfIndex];
+          bottle.x += shelf.speed * shelf.dir;
+        }
+
+        if (bottle.x < -120 || bottle.x > canvas.width + 120) {
+          game.bottles.splice(i, 1);
+          continue;
+        }
+
+        if (!bottle.isBroken) {
+          bottle.swayOffset += 0.05;
+          const wobbleY = Math.sin(bottle.swayOffset) * 2;
+          const typeCfg = BOTTLE_TYPES[bottle.type];
+          
+          ctx.shadowBlur = 8;
+          ctx.shadowColor = typeCfg.color;
+          ctx.fillStyle = typeCfg.color;
+
+          ctx.beginPath();
+          ctx.roundRect(bottle.x, bottle.y + wobbleY, bottle.w, bottle.h, [8, 8, 4, 4]);
+          ctx.fill();
+
+          ctx.fillStyle = typeCfg.secondaryColor;
+          ctx.beginPath();
+          ctx.roundRect(bottle.x + bottle.w / 3, bottle.y - 12 + wobbleY, bottle.w / 3, 16, 2);
+          ctx.fill();
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+          ctx.fillRect(bottle.x + 4, bottle.y + 10 + wobbleY, 3, bottle.h - 24);
+          ctx.shadowBlur = 0; 
+        }
+      }
+
+      // Render Glass Particles
+      for (let i = game.particles.length - 1; i >= 0; i--) {
+        const p = game.particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += p.gravity;
+        p.alpha -= p.decay;
+
+        if (p.alpha <= 0) {
+          game.particles.splice(i, 1);
+          continue;
+        }
+
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle);
+        ctx.fillStyle = p.color;
+        
+        ctx.beginPath();
+        ctx.moveTo(-p.size, -p.size);
+        ctx.lineTo(p.size, -p.size);
+        ctx.lineTo(p.size * 1.5, p.size * 1.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1.0;
+
+      // Render Floating Combat Text Popups
+      for (let i = game.floatingTexts.length - 1; i >= 0; i--) {
+        const t = game.floatingTexts[i];
+        t.y += t.vy;
+        t.alpha -= 0.02;
+
+        if (t.alpha <= 0) {
+          game.floatingTexts.splice(i, 1);
+          continue;
+        }
+
+        ctx.globalAlpha = t.alpha;
+        ctx.fillStyle = t.color;
+        ctx.font = 'bold 13px Orbitron';
+        ctx.textAlign = 'center';
+        ctx.fillText(t.text, t.x, t.y);
+      }
+      ctx.globalAlpha = 1.0;
+
+      // Render Laser Trace Shots
+      for (let i = game.lasersShot.length - 1; i >= 0; i--) {
+        const laser = game.lasersShot[i];
+        laser.alpha -= 0.08;
+
+        if (laser.alpha <= 0) {
+          game.lasersShot.splice(i, 1);
+          continue;
+        }
+
+        ctx.save();
+        ctx.globalAlpha = laser.alpha;
+        ctx.strokeStyle = laser.color;
+        ctx.lineWidth = laser.range;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = laser.color;
+
+        ctx.beginPath();
+        ctx.moveTo(laser.startX, laser.startY);
+        ctx.lineTo(laser.endX, laser.endY);
+        ctx.stroke();
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1.0;
+
+      // Compute cursor targets based on controller bindings
+      const activeX = (appState.controller === 'gesture') ? appState.smoothedHandX : fallbackController.mouseX;
+      const activeY = (appState.controller === 'gesture') ? appState.smoothedHandY : fallbackController.mouseY;
+
+      const aimingX = activeX * canvas.width;
+      const aimingY = activeY * canvas.height;
+
+      // Autolock Hover Logic
+      if (game.isRunning && appState.triggerType === 'hover' && appState.controller === 'gesture') {
+        let currentLocked = null;
+        game.bottles.forEach((bottle) => {
+          if (bottle.isBroken) return;
+          if (aimingX >= bottle.x && aimingX <= bottle.x + bottle.w &&
+              aimingY >= bottle.y && aimingY <= bottle.y + bottle.h) {
+            currentLocked = bottle;
+          }
+        });
+
+        if (currentLocked) {
+          if (game.hoverTarget === currentLocked) {
+            game.hoverAccumulator += 3.5; 
+            if (game.hoverAccumulator >= 100) {
+              fireWeapon(aimingX, aimingY);
+              game.hoverAccumulator = 0; 
+            }
+          } else {
+            game.hoverTarget = currentLocked;
+            game.hoverAccumulator = 0;
+          }
+        } else {
+          game.hoverTarget = null;
+          game.hoverAccumulator = Math.max(0, game.hoverAccumulator - 5);
+        }
+      } else {
+        game.hoverTarget = null;
+        game.hoverAccumulator = 0;
+      }
+
+      drawCrosshair(aimingX, aimingY);
+
+      if (game.isReloading) {
+        ctx.strokeStyle = '#eab308';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(aimingX, aimingY, 32, 0, (Math.PI * 2) * (game.reloadProgress / 100));
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '8px Orbitron';
+        ctx.textAlign = 'center';
+        ctx.fillText("RELOADING", aimingX, aimingY - 42);
+      }
+
+      if (game.isRunning && appState.activeMode === 'survival') {
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+        ctx.fillRect(canvas.width / 2 - 80, 10, 160, 32);
+        ctx.strokeStyle = '#ef4444';
+        ctx.strokeRect(canvas.width / 2 - 80, 10, 160, 32);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px Orbitron';
+        ctx.textAlign = 'center';
+        ctx.fillText(`TIME: ${game.timeLeft}s`, canvas.width / 2, 31);
+      }
+
+      // Draw Gesture Calibration / Pinch Intensity Bar in bottom left
+      if (appState.controller === 'gesture' && appState.cameraActive) {
+        drawGestureCalibrationHUD();
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function drawCrosshair(x, y) {
+      const isAimedOnBottle = game.hoverTarget !== null;
+      const color = isAimedOnBottle ? '#eab308' : appState.isPinched ? '#f43f5e' : '#06b6d4';
+      
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = color;
+
+      ctx.beginPath();
+      ctx.arc(x, y, 16, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(x, y, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(x - 24, y); ctx.lineTo(x - 8, y);
+      ctx.moveTo(x + 8, y); ctx.lineTo(x + 24, y);
+      ctx.moveTo(x, y - 24); ctx.lineTo(x, y - 8);
+      ctx.moveTo(x, y + 8); ctx.lineTo(x, y + 24);
+      ctx.stroke();
+
+      if (game.hoverAccumulator > 0) {
+        ctx.strokeStyle = '#22c55e';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, 22, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2) * (game.hoverAccumulator / 100));
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function drawGestureCalibrationHUD() {
+      // Small calibration HUD overlay in top-left corners of canvas
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
+      ctx.fillRect(15, 15, 140, 50);
+      ctx.strokeStyle = 'rgba(6, 182, 212, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(15, 15, 140, 50);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '8px Orbitron';
+      ctx.textAlign = 'left';
+      ctx.fillText("PINCH INTENSITY", 22, 28);
+
+      // Value visualization bar: normalized pinch range is 0.05 to 0.50
+      // Map normal unpinched (0.45) to pinched (0.15) to 0% - 100%
+      const maxVal = 0.45;
+      const minVal = 0.16;
+      const percent = Math.min(100, Math.max(0, ((maxVal - appState.normalizedPinchDist) / (maxVal - minVal)) * 100));
+
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(22, 34, 126, 8);
+
+      ctx.fillStyle = percent > 85 ? '#f43f5e' : percent > 50 ? '#eab308' : '#06b6d4';
+      ctx.fillRect(22, 34, 126 * (percent / 100), 8);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 7px Orbitron';
+      ctx.fillText(appState.isPinched ? "TRIGGER LOCKED" : "AIM/PINCH", 22, 53);
+    }
+
+    // --- APP LIFE CYCLES ---
+    function handleGameOver() {
+      game.isRunning = false;
+
+      if (game.score > highScores[appState.activeMode]) {
+        highScores[appState.activeMode] = game.score;
+        localStorage.setItem(`hi_bottles_${appState.activeMode}`, game.score);
+        document.getElementById('game-hiscore').innerText = game.score;
+      }
+
+      openModal(
+        "SESSION COMPLETED!",
+        `Score: ${game.score} pts. Practice aiming and maintain higher multipliers to peak your best scores.`,
+        "fa-trophy"
+      );
+    }
+
+    function openModal(title, desc, icon = "fa-gamepad") {
+      document.getElementById('modal-title').innerText = title;
+      document.getElementById('modal-desc').innerText = desc;
+      document.getElementById('modal-icon').className = `fa-solid ${icon}`;
+      document.getElementById('game-modal').classList.remove('opacity-0', 'pointer-events-none');
+    }
+
+    function closeModal() {
+      document.getElementById('game-modal').classList.add('opacity-0', 'pointer-events-none');
+    }
+
+    document.getElementById('btn-start-game').addEventListener('click', () => {
+      closeModal();
+      initGame();
+      game.isRunning = true;
+    });
+
+    const fallbackController = {
+      mouseX: 0.5,
+      mouseY: 0.5
+    };
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (appState.controller !== 'fallback') return;
+      const rect = canvas.getBoundingClientRect();
+      fallbackController.mouseX = (e.clientX - rect.left) / rect.width;
+      fallbackController.mouseY = (e.clientY - rect.top) / rect.height;
+    });
+
+    canvas.addEventListener('click', (e) => {
+      if (appState.controller !== 'fallback') return;
+      const rect = canvas.getBoundingClientRect();
+      const aimingX = ((e.clientX - rect.left) / rect.width) * canvas.width;
+      const aimingY = ((e.clientY - rect.top) / rect.height) * canvas.height;
+      fireWeapon(aimingX, aimingY);
+    });
+
+    canvas.addEventListener('touchmove', (e) => {
+      if (appState.controller !== 'fallback') return;
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      fallbackController.mouseX = (touch.clientX - rect.left) / rect.width;
+      fallbackController.mouseY = (touch.clientY - rect.top) / rect.height;
+    }, { passive: true });
+
+    canvas.addEventListener('touchstart', (e) => {
+      if (appState.controller !== 'fallback') return;
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      const aimingX = ((touch.clientX - rect.left) / rect.width) * canvas.width;
+      const aimingY = ((touch.clientY - rect.top) / rect.height) * canvas.height;
+      fireWeapon(aimingX, aimingY);
+    }, { passive: true });
+
+    // Handle audio setting toggles
+    const soundToggleBtn = document.getElementById('btn-sound-toggle');
+    soundToggleBtn.addEventListener('click', () => {
+      appState.soundOn = !appState.soundOn;
+      if (appState.soundOn) {
+        soundToggleBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i> SOUND ON';
+        soundToggleBtn.className = "px-3 py-1.5 rounded-lg text-xs font-bold font-mono border border-slate-800 bg-slate-950 text-emerald-400 hover:text-emerald-300 flex items-center gap-2 transition-all";
+        audioSynth.init();
+        audioSynth.playLaser(440, 880, 0.1);
+      } else {
+        soundToggleBtn.innerHTML = '<i class="fa-solid fa-volume-xmark"></i> MUTED';
+        soundToggleBtn.className = "px-3 py-1.5 rounded-lg text-xs font-bold font-mono border border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-400 flex items-center gap-2 transition-all";
+      }
+    });
+
+    // Control selectors (Gesture vs Mouse Mode)
+    const ctrlGestureBtn = document.getElementById('ctrl-gesture');
+    const ctrlFallbackBtn = document.getElementById('ctrl-fallback');
+
+    ctrlGestureBtn.addEventListener('click', () => {
+      appState.controller = 'gesture';
+      ctrlGestureBtn.className = "px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1.5 transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md shadow-cyan-500/10";
+      ctrlFallbackBtn.className = "px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1.5 transition-all text-slate-400 hover:text-white";
+      document.getElementById('game-help-text').innerText = "Keep your hand 2-3 feet away from your camera lens for precise targeting.";
+    });
+
+    ctrlFallbackBtn.addEventListener('click', () => {
+      appState.controller = 'fallback';
+      ctrlFallbackBtn.className = "px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1.5 transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md shadow-cyan-500/10";
+      ctrlGestureBtn.className = "px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1.5 transition-all text-slate-400 hover:text-white";
+      document.getElementById('game-help-text').innerText = "Aim and Left-Click or Tap anywhere on the board directly to burst bottles!";
+    });
+
+    document.getElementById('btn-switch-control').addEventListener('click', () => {
+      ctrlFallbackBtn.click();
+      closeModal();
+      initGame();
+      game.isRunning = true;
+    });
+
+    // Handle smoothing configuration changes
+    const smoothingSlider = document.getElementById('slider-smoothing');
+    const smoothingValText = document.getElementById('val-smoothing');
+    smoothingSlider.addEventListener('input', (e) => {
+      appState.smoothing = parseFloat(e.target.value);
+      smoothingValText.innerText = appState.smoothing.toFixed(2);
+    });
+
+    // Handle trigger types switching
+    const triggerPinchBtn = document.getElementById('trigger-pinch');
+    const triggerHoverBtn = document.getElementById('trigger-hover');
+
+    triggerPinchBtn.addEventListener('click', () => {
+      appState.triggerType = 'pinch';
+      triggerPinchBtn.className = "px-3 py-2 text-xs font-bold rounded-lg border bg-emerald-950/50 border-emerald-500/50 text-emerald-300 transition-all flex flex-col items-center gap-1";
+      triggerHoverBtn.className = "px-3 py-2 text-xs font-bold rounded-lg border bg-slate-950 border-slate-800 text-slate-400 hover:text-white transition-all flex flex-col items-center gap-1";
+    });
+
+    triggerHoverBtn.addEventListener('click', () => {
+      appState.triggerType = 'hover';
+      triggerHoverBtn.className = "px-3 py-2 text-xs font-bold rounded-lg border bg-emerald-950/50 border-emerald-500/50 text-emerald-300 transition-all flex flex-col items-center gap-1";
+      triggerPinchBtn.className = "px-3 py-2 text-xs font-bold rounded-lg border bg-slate-950 border-slate-800 text-slate-400 hover:text-white transition-all flex flex-col items-center gap-1";
+    });
+
+    // --- MEDIAPIPE GESTURE RECOGNITION ENHANCEMENT ---
+    const videoElement = document.getElementById('webcam');
+    const outputCanvas = document.getElementById('output-canvas');
+    const outCtx = outputCanvas.getContext('2d');
+    
+    outputCanvas.width = 640;
+    outputCanvas.height = 480;
+
+    let trackingLatencyTimer = performance.now();
+
+    function onResults(results) {
+      const now = performance.now();
+      const latency = Math.round(now - trackingLatencyTimer);
+      trackingLatencyTimer = now;
+      document.getElementById('perf-latency').innerText = `${latency} ms`;
+
+      // Update FPS frame monitor
+      const fps = Math.round(1000 / Math.max(1, latency));
+      document.getElementById('perf-fps').innerText = fps;
+
+      outCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
+      outCtx.save();
+      if (appState.mirrorInput) {
+        outCtx.translate(outputCanvas.width, 0);
+        outCtx.scale(-1, 1);
+      }
+      outCtx.drawImage(results.image, 0, 0, outputCanvas.width, outputCanvas.height);
+      outCtx.restore();
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const statusDot = document.getElementById('status-dot');
+        const statusPing = document.getElementById('status-ping');
+        const statusText = document.getElementById('status-text');
+        
+        statusDot.className = "relative inline-flex rounded-full h-2 w-2 bg-emerald-500";
+        statusPing.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75";
+        statusText.innerText = "HAND ACTIVE";
+        statusText.className = "font-mono text-emerald-400 uppercase font-semibold";
+
+        const landmarks = results.multiHandLandmarks[0];
+
+        // Core coordinates derived from Index Fingertip (8)
+        const indexTip = landmarks[8];
+        appState.rawHandX = indexTip.x;
+        appState.rawHandY = indexTip.y;
+
+        document.getElementById('coord-raw-x').innerText = appState.rawHandX.toFixed(2);
+        document.getElementById('coord-raw-y').innerText = appState.rawHandY.toFixed(2);
+
+        // --- ENHANCED STABLE PINCH COMPUTATION (Scale Invariant) ---
+        // Calculate Palm Scale using distance between Wrist (0) and Middle finger Knuckle (9)
+        const wrist = landmarks[0];
+        const midKnuckle = landmarks[9];
+        const handScale = Math.hypot(wrist.x - midKnuckle.x, wrist.y - midKnuckle.y);
+
+        // Absolute Euclidean distance between index tip (8) and thumb tip (4)
+        const thumbTip = landmarks[4];
+        const dx = indexTip.x - thumbTip.x;
+        const dy = indexTip.y - thumbTip.y;
+        appState.rawPinchDist = Math.hypot(dx, dy);
+
+        // Standardize pinch distance relative to palm size
+        const normPinchDist = appState.rawPinchDist / (handScale || 0.25);
+        appState.normalizedPinchDist = normPinchDist;
+        document.getElementById('coord-pinch-dist').innerText = normPinchDist.toFixed(2);
+
+        let finalAimX = appState.rawHandX;
+        if (appState.mirrorInput) {
+          finalAimX = 1.0 - finalAimX;
+        }
+
+        // --- ENHANCED ADAPTIVE EYE SMOOTHING ---
+        // Dynamically reduce smoothing factor when moving fast to eliminate cursor delay/lag.
+        const dAimX = finalAimX - appState.smoothedHandX;
+        const dAimY = appState.rawHandY - appState.smoothedHandY;
+        const speed = Math.hypot(dAimX, dAimY);
+        const dynamicSmoothing = Math.min(0.85, Math.max(appState.smoothing, appState.smoothing + speed * 1.8));
+
+        appState.smoothedHandX = (finalAimX * dynamicSmoothing) + (appState.smoothedHandX * (1.0 - dynamicSmoothing));
+        appState.smoothedHandY = (appState.rawHandY * dynamicSmoothing) + (appState.smoothedHandY * (1.0 - dynamicSmoothing));
+
+        // Clamp tracking targets cleanly inside display matrix
+        appState.smoothedHandX = Math.min(1.0, Math.max(0.0, appState.smoothedHandX));
+        appState.smoothedHandY = Math.min(1.0, Math.max(0.0, appState.smoothedHandY));
+
+        // --- ENHANCED HYSTERESIS PINCH STATE TRIGGER (Schmitt Trigger) ---
+        if (appState.triggerType === 'pinch') {
+          // Trigger points: Highly responsive unpinch/pinch transitions
+          const pinchThreshold = 0.21; 
+          const releaseThreshold = 0.27;
+
+          if (normPinchDist < pinchThreshold) {
+            if (!appState.isPinched) {
+              appState.isPinched = true;
+              
+              // Direct Fire Action
+              const absoluteX = appState.smoothedHandX * canvas.width;
+              const absoluteY = appState.smoothedHandY * canvas.height;
+              fireWeapon(absoluteX, absoluteY);
+            }
+          } else if (normPinchDist > releaseThreshold) {
+            appState.isPinched = false;
+          }
+        }
+
+        drawGestureOverlay(landmarks);
+      } else {
+        const statusDot = document.getElementById('status-dot');
+        const statusPing = document.getElementById('status-ping');
+        const statusText = document.getElementById('status-text');
+        
+        statusDot.className = "relative inline-flex rounded-full h-2 w-2 bg-amber-500";
+        statusPing.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75";
+        statusText.innerText = "WAITING FOR GESTURE";
+        statusText.className = "font-mono text-amber-500 uppercase font-semibold";
+      }
+    }
+
+    const HAND_SKELETON_PATHS = [
+      [0,1], [1,2], [2,3], [3,4], // Thumb
+      [0,5], [5,6], [6,7], [7,8], // Index
+      [9,10], [10,11], [11,12],   // Middle
+      [13,14], [14,15], [15,16],  // Ring
+      [0,17], [17,18], [18,19], [19,20], // Pinky
+      [5,9], [9,13], [13,17] // Palm
+    ];
+
+    function drawGestureOverlay(landmarks) {
+      outCtx.lineWidth = 3;
+      outCtx.lineCap = 'round';
+
+      HAND_SKELETON_PATHS.forEach(([start, end]) => {
+        const p1 = landmarks[start];
+        const p2 = landmarks[end];
+
+        let x1 = p1.x * outputCanvas.width;
+        let y1 = p1.y * outputCanvas.height;
+        let x2 = p2.x * outputCanvas.width;
+        let y2 = p2.y * outputCanvas.height;
+
+        if (appState.mirrorInput) {
+          x1 = outputCanvas.width - x1;
+          x2 = outputCanvas.width - x2;
+        }
+
+        outCtx.strokeStyle = 'rgba(236, 72, 153, 0.7)'; 
+        outCtx.beginPath();
+        outCtx.moveTo(x1, y1);
+        outCtx.lineTo(x2, y2);
+        outCtx.stroke();
+      });
+
+      landmarks.forEach((node, idx) => {
+        let x = node.x * outputCanvas.width;
+        let y = node.y * outputCanvas.height;
+
+        if (appState.mirrorInput) {
+          x = outputCanvas.width - x;
+        }
+
+        outCtx.beginPath();
+        outCtx.arc(x, y, (idx === 8 || idx === 4) ? 7 : 3, 0, Math.PI * 2);
+
+        if (idx === 8) {
+          outCtx.fillStyle = '#22d3ee';
+          outCtx.shadowColor = '#06b6d4';
+          outCtx.shadowBlur = 8;
+        } else if (idx === 4) {
+          outCtx.fillStyle = '#f43f5e';
+          outCtx.shadowBlur = 0;
+        } else {
+          outCtx.fillStyle = '#ffffff';
+          outCtx.shadowBlur = 0;
+        }
+        outCtx.fill();
+      });
+      outCtx.shadowBlur = 0; 
+    }
+
+    function restoreCamPlaceholder() {
+      const placeholder = document.getElementById('cam-placeholder');
+      placeholder.innerHTML = `
+        <div class="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center mb-3">
+          <i class="fa-solid fa-video-slash text-xl text-slate-500 animate-pulse"></i>
+        </div>
+        <p class="font-bold text-slate-300 text-sm">Awaiting Video Input</p>
+        <p class="text-[11px] text-slate-500 mt-1 max-w-xs leading-relaxed">Allow camera permissions for interactive air gesture bottle bursting!</p>
+        <button id="btn-init-camera" class="mt-4 px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 active:scale-95 transition-all text-xs font-bold text-white rounded-lg flex items-center gap-2">
+          <i class="fa-solid fa-power-off"></i> Initialize Camera
+        </button>
+      `;
+      document.getElementById('btn-init-camera').addEventListener('click', () => {
+        startWebcamTracking();
+      });
+    }
+
+    let mediaPipeCamera = null;
+
+    function startWebcamTracking() {
+      const handsTracker = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      });
+
+      handsTracker.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.65,
+        minTrackingConfidence: 0.60
+      });
+
+      handsTracker.onResults(onResults);
+
+      mediaPipeCamera = new Camera(videoElement, {
+        onFrame: async () => {
+          await handsTracker.send({ image: videoElement });
+        },
+        width: 640,
+        height: 480
+      });
+
+      mediaPipeCamera.start()
+        .then(() => {
+          appState.cameraActive = true;
+          document.getElementById('cam-placeholder').classList.add('opacity-0', 'pointer-events-none');
+
+          const statusDot = document.getElementById('status-dot');
+          const statusText = document.getElementById('status-text');
+          statusDot.className = "relative inline-flex rounded-full h-2 w-2 bg-emerald-500";
+          statusText.innerText = "SENSOR READY";
+          statusText.className = "font-mono text-emerald-400 uppercase font-semibold";
+        })
+        .catch(err => {
+          console.warn("Could not initiate user web camera: ", err);
+          
+          const statusDot = document.getElementById('status-dot');
+          const statusText = document.getElementById('status-text');
+          statusDot.className = "relative inline-flex rounded-full h-2 w-2 bg-rose-500 animate-pulse";
+          statusText.innerText = "CAM BLOCKED";
+          statusText.className = "font-mono text-rose-500 uppercase font-semibold";
+
+          const placeholder = document.getElementById('cam-placeholder');
+          placeholder.innerHTML = `
+            <div class="w-12 h-12 rounded-full bg-rose-950/40 border border-rose-500/30 flex items-center justify-center mb-3 text-rose-400 animate-bounce">
+              <i class="fa-solid fa-triangle-exclamation text-lg"></i>
+            </div>
+            <p class="font-bold text-rose-400 text-xs uppercase tracking-wider">Camera Access Blocked</p>
+            <p class="text-[11px] text-slate-400 mt-1.5 max-w-[240px] leading-relaxed">
+              Permission was denied. To play with hand gestures, check your browser's site settings or URL bar permissions.
+            </p>
+            <div class="flex flex-col gap-1.5 mt-4 w-full max-w-[200px]">
+              <button id="btn-fallback-auto" class="px-3 py-1.5 bg-gradient-to-r from-pink-500 to-rose-600 hover:opacity-90 active:scale-95 transition-all text-[11px] font-bold text-white rounded-lg flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-computer-mouse"></i> Switch to Mouse Play
+              </button>
+              <button id="btn-init-camera-retry" class="px-3 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] text-slate-400 rounded-lg font-semibold transition-all">
+                <i class="fa-solid fa-rotate-right"></i> Retry Connection
+              </button>
+            </div>
+          `;
+
+          document.getElementById('btn-fallback-auto').addEventListener('click', () => {
+            document.getElementById('ctrl-fallback').click();
+            document.getElementById('modal-desc').innerText = "We've loaded Mouse/Touch control fallback for you. Aim and click on the game board to shoot!";
+          });
+
+          document.getElementById('btn-init-camera-retry').addEventListener('click', () => {
+            restoreCamPlaceholder();
+            startWebcamTracking();
+          });
+
+          document.getElementById('ctrl-fallback').click();
+          document.getElementById('modal-desc').innerText = "Camera access is blocked, but we've auto-switched you to Mouse/Touch mode! Click below to start playing immediately.";
+        });
+    }
+
+    const modeClassicBtn = document.getElementById('mode-classic');
+    const modeSurvivalBtn = document.getElementById('mode-survival');
+
+    function changeGameMode(newMode) {
+      if (appState.activeMode === newMode) return;
+      appState.activeMode = newMode;
+
+      if (newMode === 'classic') {
+        modeClassicBtn.className = "px-3 py-1.5 rounded-lg text-xs font-bold font-orbitron transition-all bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-lg shadow-pink-500/20";
+        modeSurvivalBtn.className = "px-3 py-1.5 rounded-lg text-xs font-bold font-orbitron transition-all text-slate-400 hover:bg-slate-900 hover:text-white";
+        openModal("CONVEYOR BELT GALLERY", "Bottles travel continuously across three shelves. Shoot precision shots to score max bonus combos!", "fa-beer-mug-empty");
+      } else {
+        modeSurvivalBtn.className = "px-3 py-1.5 rounded-lg text-xs font-bold font-orbitron transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20";
+        modeClassicBtn.className = "px-3 py-1.5 rounded-lg text-xs font-bold font-orbitron transition-all text-slate-400 hover:bg-slate-900 hover:text-white";
+        openModal("TIME CHALLENGE MODE", "You have exactly 60 seconds to break as many targets as you can. Shoot golden bottles to extend multiplier times!", "fa-clock-rotate-left");
+      }
+
+      initGame(newMode);
+    }
+
+    modeClassicBtn.addEventListener('click', () => changeGameMode('classic'));
+    modeSurvivalBtn.addEventListener('click', () => changeGameMode('survival'));
+
+    document.getElementById('btn-init-camera').addEventListener('click', () => {
+      startWebcamTracking();
+    });
+
+    // --- ENGINE LAUNCH ON DOM LOAD ---
+    window.onload = function() {
+      audioSynth.init();
+      initGame('classic');
+      gameLoop();
+      startWebcamTracking();
+    };
+  </script>
+</body>
+</html>
