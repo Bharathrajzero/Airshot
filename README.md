@@ -8,7 +8,6 @@ Built completely with vanilla frontend technologies, MediaPipe Hands, and the dy
 ## Screenshot
 <img width="1920" height="1079" alt="image" src="https://github.com/user-attachments/assets/dcac28fd-0ffc-406e-9a87-b022a4c02a6a" />
 <img width="1920" height="1079" alt="image" src="https://github.com/user-attachments/assets/145200f2-691f-4efc-b9e0-631611f7169a" />
-<img width="1920" height="1079" alt="image" src="https://github.com/user-attachments/assets/bb085b59-c6ff-4190-858a-cd2c2e5c69eb" />
 
 
 ## Live Features
